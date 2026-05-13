@@ -1,0 +1,162 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(ggpubr)
+
+main_df <- read_excel("log_transformed_df_Pariwise_reGroup_plot_AllTaxa.xlsx", sheet = "df")
+p_value_df <- read_excel("wilcoxon_results_with_rank_biserial_effect_size_one_tailed.xlsx", sheet = "Combined")
+
+# Rename columns for consistency
+colnames(p_value_df) <- c("Feature", "group1", "group2", "Wilcoxon_Stat", "p_value", "Effect_Size", "Effect_Size_abs")
+
+# Remove NA p-values and filter target comparisons
+p_value_df <- p_value_df %>%
+  filter(!is.na(p_value), group1 == "Baseline", group2 %in% c("FollUp", "EndMTT"))
+
+desired_timepoints <- c("Baseline", "Vanco", "IniMTT", "EndMTT", "FollUp", "pl_Baseline", "pl_NoVanco", "pl_IniPart1", "pl_EndMTT")
+display_labels <- c(
+  "Baseline" = "Baseline",
+  "Vanco" = "Vanco",
+  "IniMTT" = "StartMT",
+  "EndMTT" = "EndMT",
+  "FollUp" = "FollUp",
+  "pl_Baseline" = "pl_Baseline",
+  "pl_NoVanco" = "pl_Vanco",
+  "pl_IniPart1" = "pl_StartMT",
+  "pl_EndMTT" = "pl_EndMT"
+)
+
+selected_pathways <- unique(p_value_df$Feature)
+
+# Prepare main dataframe
+analysis_df <- main_df %>% select(c("SampleID", "PatientID", "TreatPoints", "Category", all_of(selected_pathways)))
+
+# Filter non-donor and TD samples
+analysis_df_filtered <- analysis_df %>% filter(!TreatPoints %in% c("Donor", "TD"))
+
+# Create donor/TD frames for line reference
+donor_df <- analysis_df %>% filter(TreatPoints == "Donor")
+td_df <- analysis_df %>% filter(TreatPoints == "TD")
+
+# Calculate mean values for Donor and TD
+donor_means <- data.frame(Feature = names(colMeans(donor_df[, sapply(donor_df, is.numeric)], na.rm = TRUE)),
+                          mean = as.numeric(colMeans(donor_df[, sapply(donor_df, is.numeric)], na.rm = TRUE)))
+td_means <- data.frame(Feature = names(colMeans(td_df[, sapply(td_df, is.numeric)], na.rm = TRUE)),
+                       mean = as.numeric(colMeans(td_df[, sapply(td_df, is.numeric)], na.rm = TRUE)))
+
+# Filter for Treated and Placebo only
+analysis_df_filtered <- analysis_df_filtered %>% filter(Category %in% c("Treated", "Placebo"))
+
+# Factor levels for consistent order
+analysis_df_filtered$TreatPoints <- factor(
+  analysis_df_filtered$TreatPoints,
+  levels = c("Baseline", "Vanco", "IniMTT", "EndMTT", "FollUp", "pl_Baseline", "pl_NoVanco", "pl_IniPart1", "pl_EndMTT", "Donor", "TD")
+)
+
+# Reshape Data
+analysis_long_df <- analysis_df_filtered %>%
+  pivot_longer(cols = -c(SampleID, PatientID, TreatPoints, Category), names_to = "Feature", values_to = "Abundance") %>%
+  mutate(Abundance = as.numeric(Abundance))
+
+plot_list <- list()
+
+palette <- c(
+  "Baseline" = "#27b85c", "Vanco" = "#27b85c", "IniMTT" = "#27b85c", "EndMTT" = "#27b85c",
+  "pl_Baseline" = "purple", "pl_NoVanco" = "purple", "pl_IniPart1" = "purple", "FollUp" = "#27b85c",
+  "pl_EndMTT" = "purple"
+)
+
+# Loop through each Feature to generate plots
+for (taxon in selected_pathways) {
+  plot_df <- analysis_long_df %>% filter(Feature == taxon, TreatPoints %in% desired_timepoints)
+  plot_df$TreatPoints <- factor(plot_df$TreatPoints, levels = desired_timepoints)
+  
+  plot_df <- plot_df %>%
+    mutate(GroupBlock = case_when(
+      TreatPoints %in% c("Baseline", "Vanco", "IniMTT", "EndMTT", "FollUp") ~ "Treatment",
+      TreatPoints %in% c("pl_Baseline", "pl_NoVanco", "pl_IniPart1", "pl_EndMTT") ~ "Placebo",
+      TRUE ~ NA_character_
+    ))
+  
+  line_df <- plot_df %>% group_by(PatientID, GroupBlock) %>% filter(n_distinct(TreatPoints) > 1) %>% ungroup()
+  
+  donor_mean_val <- donor_means %>% filter(Feature == taxon) %>% pull(mean)
+  td_mean_val <- td_means %>% filter(Feature == taxon) %>% pull(mean)
+  
+  stat_test <- p_value_df %>%
+    filter(Feature == taxon) %>%
+    mutate(
+      group1 = factor(group1, levels = levels(analysis_df_filtered$TreatPoints)),
+      group2 = factor(group2, levels = levels(analysis_df_filtered$TreatPoints)),
+      xmin = as.numeric(group1),
+      xmax = as.numeric(group2),
+      y.position = max(plot_df$Abundance, na.rm = TRUE) + seq(0.05, 0.05 * n(), length.out = n()),
+      label = sprintf("p=%.2f (r.es=%.1f)", p_value, Effect_Size_abs)
+    ) %>%
+    filter(!is.na(xmin) & !is.na(xmax))
+  
+  if (nrow(plot_df) > 0 && nrow(stat_test) > 0) {
+    legend_df <- data.frame(
+      x = rep(Inf, 2),
+      y = c(donor_mean_val, td_mean_val),
+      source = c("Donor (mean)", "TD (mean)")
+    )
+    
+    p <- ggplot(plot_df, aes(x = TreatPoints, y = Abundance)) +
+      geom_boxplot(aes(fill = TreatPoints), outlier.shape = NA, width = 0.6) +
+      geom_point(
+        aes(group = PatientID, fill = TreatPoints),
+        position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.6),
+        shape = 21, size = 3, stroke = 0.5, colour = "black"
+      ) +
+      geom_line(
+        data = line_df,
+        aes(x = TreatPoints, y = Abundance, group = interaction(PatientID, GroupBlock)),
+        position = position_dodge(width = 0.6),
+        linetype = "dashed", linewidth = 0.25, color = "gray50"
+      ) +
+      geom_hline(yintercept = donor_mean_val, linetype = "dashed", linewidth = 0.6, color = "#3f7004") +
+      geom_hline(yintercept = td_mean_val, linetype = "dashed", linewidth = 0.6, color = "#579aff") +
+      geom_point(
+        data = legend_df,
+        aes(x = x, y = y, color = source),
+        inherit.aes = FALSE,
+        size = 2
+      ) +
+      scale_color_manual(name = " ", values = c("Donor (mean)" = "#3f7004", "TD (mean)" = "#579aff")) +
+      guides(color = guide_legend(order = 2, override.aes = list(linetype = "dashed", shape = NA))) +
+      scale_fill_manual(values = palette, labels = display_labels) +
+      scale_x_discrete(labels = display_labels) +
+      stat_pvalue_manual(
+        data = stat_test, label = "label", xmin = "xmin", xmax = "xmax", y.position = "y.position",
+        tip.length = 0.01, step.increase = 0.05, size = 4.6
+      ) +
+      labs(y = bquote(italic(.(taxon)) ~ "(log10 RA)"), x = NULL) +
+      theme_classic() +
+      theme(
+        plot.margin = margin(5, 5, 5, 5),
+        axis.text.x = element_text(angle = 45, hjust = 1, color = "black", face = "plain", size = 14),
+        axis.text.y = element_text(color = "black", face = "plain", size = 14),
+        axis.title.y = element_text(face = "plain", size = 16),
+        legend.position = "right",
+        legend.text = element_text(size = 13),
+        legend.title = element_text(size = 13)
+      ) +
+      guides(fill = guide_legend(order = 1), color = guide_legend(order = 2))
+    
+    plot_list[[taxon]] <- p
+  } else {
+    message(paste("Skipping:", taxon, "— No valid data or comparisons"))
+  }
+}
+
+pdf("Longitudinal_boxplots_with_p-values.pdf", width = 7, height = 5)
+for (plot in plot_list) print(plot)
+dev.off()
+```
+

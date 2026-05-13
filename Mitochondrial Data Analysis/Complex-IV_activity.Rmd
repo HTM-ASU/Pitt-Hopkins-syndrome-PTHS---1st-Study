@@ -1,0 +1,155 @@
+---
+title: "Complex-IV_activity"
+output: html_notebook
+---
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(rstatix)
+library(patchwork)
+
+# Load and clean dataset
+df <- read_excel("combined_df.xlsx", sheet = "Raw") %>%
+  mutate(Time = factor(Time, levels = c("TD", "Baseline", "EndPart1", "EndPart2")),
+         Group = factor(Group, levels = c("TD", "Group-A", "Group-B")),
+         fill_group = as.character(Group)) %>%
+  filter(!is.na(PatientID), !is.na(Time), !is.na(Group), !is.na(ComplexIV_activity))
+
+y_pos <- max(df$ComplexIV_activity, na.rm = TRUE) + 0.25
+```
+
+
+```{r}
+# TD vs Baseline comparison
+td_baseline_df <- df %>%
+  filter(Time %in% c("TD", "Baseline")) %>%
+  mutate(Comparison = factor(if_else(Time == "TD", "TD", "Baseline"),
+                             levels = c("TD", "Baseline")))
+
+td_baseline_test <- td_baseline_df %>%
+  t_test(ComplexIV_activity ~ Comparison)
+
+td_baseline_d <- td_baseline_df %>%
+  cohens_d(ComplexIV_activity ~ Comparison, hedges.correction = FALSE) %>%
+  pull(effsize)
+
+td_p <- td_baseline_test %>% pull(p)
+label_td <- sprintf("p=%.3f (es=%.2f)", td_p, td_baseline_d)
+```
+
+
+```{r}
+# Group comparison at EndPart1
+group_comparison_df <- df %>%
+  filter(Time == "EndPart1") %>%
+  mutate(Group2 = factor(Group, levels = c("Group-A", "Group-B")))
+
+group_comparison_test <- group_comparison_df %>%
+  t_test(ComplexIV_activity ~ Group2)
+
+group_comparison_d <- group_comparison_df %>%
+  cohens_d(ComplexIV_activity ~ Group2, hedges.correction = FALSE) %>%
+  pull(effsize)
+
+ep1_p <- group_comparison_test %>% pull(p)
+label_ep1 <- sprintf("p=%.3f (es=%.2f)", ep1_p, group_comparison_d)
+```
+
+
+```{r}
+base_font <- 14
+dodge_w <- 0.6
+
+p_td <- ggplot() +
+  geom_boxplot(
+    data = df %>% filter(Time == "TD"),
+    aes(x = "TD", y = ComplexIV_activity),
+    width = 0.5, outlier.shape = NA, color = "black", fill = "#FFB703"
+  ) +
+  geom_jitter(
+    data = df %>% filter(Time == "TD"),
+    aes(x = "TD", y = ComplexIV_activity),
+    shape = 21, color = "black", fill = "#FFB703",
+    stroke = 0.5, size = 3, width = 0.08, alpha = 0.95
+  ) +
+  geom_boxplot(
+    data = df %>% filter(Time == "Baseline"),
+    aes(x = "Baseline", y = ComplexIV_activity),
+    width = 0.5, outlier.shape = NA, color = "black", fill = "#0077CC"
+  ) +
+  geom_jitter(
+    data = df %>% filter(Time == "Baseline"),
+    aes(x = "Baseline", y = ComplexIV_activity),
+    shape = 21, color = "black", fill = "#0077CC",
+    stroke = 0.5, size = 3, width = 0.08, alpha = 0.95
+  ) +
+  annotate("segment", x = 1, xend = 2, y = y_pos, yend = y_pos, linewidth = 0.6) +
+  annotate("segment", x = 1, xend = 1, y = y_pos, yend = y_pos - 0.12, linewidth = 0.6) +
+  annotate("segment", x = 2, xend = 2, y = y_pos, yend = y_pos - 0.12, linewidth = 0.6) +
+  annotate("text", x = 1.5, y = y_pos + 0.3, label = label_td, size = 4) +
+  theme_classic(base_size = base_font) +
+  theme(
+    legend.position = "none",
+    axis.title.x = element_blank(),
+    axis.title.y = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(size = 14, face = "bold"),
+    axis.text.y = element_text(size = 14, face = "bold"),
+    plot.margin = margin(0, 0, 0, 0)
+  ) +
+  coord_cartesian(ylim = c(0, 10)) +
+  labs(y = "Mitochondrial protein Complex-IV activity\n(nanomoles/min/mg-protein)")
+```
+
+
+```{r}
+# Main longitudinal plot
+p_main <- ggplot(df %>% filter(Time != "TD"), aes(x = Time, y = ComplexIV_activity)) +
+  scale_x_discrete(labels = c(Baseline = "Baseline", EndPart1 = "EndPart 1", EndPart2 = "EndPart 2")) +
+  geom_boxplot(
+    aes(fill = fill_group, group = interaction(Time, Group)),
+    position = position_dodge(width = dodge_w),
+    width = 0.5, outlier.shape = NA, color = "black"
+  ) +
+  geom_jitter(
+    aes(fill = fill_group),
+    shape = 21, color = "black", stroke = 0.5, size = 3,
+    position = position_jitterdodge(jitter.width = 0.15, dodge.width = dodge_w),
+    alpha = 0.95, show.legend = FALSE
+  ) +
+  annotate("segment", x = 1.8, xend = 2.2, y = y_pos, yend = y_pos, linewidth = 0.6) +
+  annotate("segment", x = 1.8, xend = 1.8, y = y_pos, yend = y_pos - 0.12, linewidth = 0.6) +
+  annotate("segment", x = 2.2, xend = 2.2, y = y_pos, yend = y_pos - 0.12, linewidth = 0.6) +
+  annotate("text", x = 2, y = y_pos + 0.3, label = label_ep1, size = 4) +
+  scale_fill_manual(
+    values = c("Group-A" = "#27b85c", "Group-B" = "purple"),
+    breaks = c("Group-A", "Group-B"),
+    labels = c("Group-A", "Group-B")
+  ) +
+  theme_classic(base_size = base_font) +
+  theme(
+    legend.position = c(0.82, 0.85),
+    legend.title = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.line.y = element_blank(),
+    axis.text.x = element_text(size = 14, face = "bold"),
+    plot.margin = margin(0, 0, 0, 0)
+  ) +
+  coord_cartesian(ylim = c(0, 10)) +
+  labs(y = NULL)
+
+combined_plot <- p_td + p_main +
+  plot_layout(widths = c(1.1, 3))
+
+print(combined_plot)
+```
+
+
+```{r}
+ggsave("mitochondrial_combined_plot.pdf", combined_plot, width = 7, height = 5.5, dpi = 300)
+ggsave("mitochondrial_combined_plot.png", combined_plot, width = 7, height = 5.5, dpi = 600)
+```
+

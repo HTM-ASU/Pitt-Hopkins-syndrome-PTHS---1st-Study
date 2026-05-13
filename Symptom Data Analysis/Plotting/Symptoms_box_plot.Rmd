@@ -1,0 +1,170 @@
+---
+title: "Symptoms"
+output: html_notebook
+---
+
+```{r}
+library(readxl)
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+library(ggpubr)
+```
+
+```{r}
+symptoms_df <- read_excel("All_symptoms.xlsx", sheet = "Sheet1")
+stats_df    <- read_excel("T-test_results.xlsx", sheet = "Sheet1")
+```
+
+```{r}
+desired_timepoints <- c(
+  "Baseline_GROUP A", "Baseline_GROUP B",
+  "End Part 1_GROUP A", "End Part 1_GROUP B",
+  "End Part 2_GROUP A", "End Part 2_GROUP B",
+  "End Part 3_GROUP A", "End Part 3_GROUP B"
+)
+
+short_timepoints <- c("Baseline", "End Part 1", "End Part 2", "End Part 3")
+short_labels     <- c("Baseline", "EndPart 1", "EndPart 2", "EndPart 3")
+
+y_titles <- c(
+  "Total Score" = "FLACC",
+  "# of days abnormal" = "DSR Abnormal Days",
+  "number of events" = "DSR Total Events"
+)
+
+palette <- c(
+  "GROUP A" = "#27b85c",
+  "GROUP B" = "purple"
+)
+
+base_theme <- theme_classic() +
+  theme(
+    plot.margin = margin(5, 5, 10, 5),
+    axis.text.x = element_text(angle = 0, hjust = 0.5, color = "black", size = 18, face = "bold"),
+    axis.text.y = element_text(color = "black", face = "bold", size = 18),
+    axis.title.y = element_text(size = 18, face = "bold"),
+    legend.position = "none"
+  )
+```
+
+```{r}
+# Keep only the columns needed for annotation, and standardize names first
+stats_df <- stats_df %>%
+  rename_with(make.names) %>%
+  transmute(
+    feature   = feature,
+    timepoint = timepoint,
+    p_value   = p_value,
+    cohens_d  = coalesce(
+      if ("cohens_d" %in% names(.)) .[["cohens_d"]] else NA_real_,
+      if ("abs_cohens_d" %in% names(.)) .[["abs_cohens_d"]] else NA_real_
+    )
+  ) %>%
+  filter(timepoint %in% c("End Part 1", "End Part 2", "End Part 3"))
+
+meta_cols <- c("Participant", "Timepoint", "Group")
+valid_timepoints <- c("Baseline", "End Part 1", "End Part 2", "End Part 3")
+
+symptoms_df <- symptoms_df %>%
+  mutate(
+    Group = as.character(Group),
+    Timepoint = as.character(Timepoint)
+  ) %>%
+  filter(
+    Group %in% c("GROUP A", "GROUP B"),
+    Timepoint %in% valid_timepoints
+  ) %>%
+  mutate(Timepoint = factor(Timepoint, levels = short_timepoints))
+
+selected_features <- setdiff(names(symptoms_df), c(meta_cols, "TimeGroup"))
+selected_features <- selected_features[sapply(symptoms_df[selected_features], is.numeric)]
+
+long_data <- symptoms_df %>%
+  select(Participant, Timepoint, Group, all_of(selected_features)) %>%
+  pivot_longer(
+    cols = all_of(selected_features),
+    names_to = "Feature",
+    values_to = "Value",
+    values_drop_na = TRUE
+  ) %>%
+  mutate(
+    Timepoint = factor(Timepoint, levels = short_timepoints),
+    Group = factor(Group, levels = c("GROUP A", "GROUP B"))
+  )
+```
+
+```{r}
+make_feature_plot <- function(feature_name) {
+  feature_df <- long_data %>% filter(Feature == feature_name)
+  if (nrow(feature_df) == 0) return(NULL)
+
+  max_y <- max(feature_df$Value, na.rm = TRUE)
+  min_y <- min(feature_df$Value, na.rm = TRUE)
+  if (!is.finite(max_y)) max_y <- 0
+  if (!is.finite(min_y)) min_y <- 0
+
+  y_base <- if (max_y == 0) 1 else max_y * 1.10
+  range_y <- max(max_y - min_y, abs(max_y) + 1)
+
+  stat_test <- stats_df %>%
+    filter(feature == feature_name, timepoint == "End Part 1")
+
+  p <- ggplot(feature_df, aes(x = Timepoint, y = Value, fill = Group)) +
+    geom_boxplot(position = position_dodge(width = 0.65), outlier.shape = NA, width = 0.6) +
+    geom_point(
+      position = position_jitterdodge(
+        jitter.width = 0.5,
+        jitter.height = 0,
+        dodge.width = 0.8,
+        seed = 42
+      ),
+      shape = 21, size = 3, stroke = 0.5, colour = "black"
+    ) +
+    scale_x_discrete(breaks = short_timepoints, labels = short_labels, drop = FALSE) +
+    scale_fill_manual(values = palette) +
+    scale_y_continuous(labels = function(x) {
+      ifelse(x >= 1 & x <= 9 & x == floor(x), sprintf("%.1f", x), as.character(x))
+    }) +
+    labs(y = if (!is.null(y_titles[[feature_name]])) y_titles[[feature_name]] else feature_name, x = NULL) +
+    base_theme
+
+  if (nrow(stat_test) > 0) {
+    stat_test <- stat_test %>%
+      mutate(
+        xcenter = 2,
+        xmin = 1.8,
+        xmax = 2.2,
+        y.position = y_base,
+        label = sprintf(
+          "p=%.2f%s",
+          p_value,
+          ifelse(is.na(cohens_d), "", sprintf(" (es=%.1f)", cohens_d))
+        ),
+        label_offset = range_y * 0.06,
+        line_y = y.position + (label_offset * 0.18),
+        text_y = y.position + label_offset
+      )
+
+    p <- p +
+      geom_segment(data = stat_test, aes(x = xmin, xend = xmax, y = line_y, yend = line_y), inherit.aes = FALSE) +
+      geom_segment(data = stat_test, aes(x = xmin, xend = xmin, y = line_y, yend = line_y - (label_offset * 0.22)), inherit.aes = FALSE) +
+      geom_segment(data = stat_test, aes(x = xmax, xend = xmax, y = line_y, yend = line_y - (label_offset * 0.22)), inherit.aes = FALSE) +
+      geom_text(data = stat_test, aes(x = xcenter, y = text_y, label = label), inherit.aes = FALSE, size = 5)
+  }
+
+  p
+}
+```
+
+```{r}
+pdf("Symptoms_plots.pdf", width = 7, height = 4.5)
+
+for (feat in selected_features) {
+  p <- make_feature_plot(feat)
+  if (!is.null(p)) print(p)
+}
+
+dev.off()
+```
+
