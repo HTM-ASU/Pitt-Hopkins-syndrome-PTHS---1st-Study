@@ -2,20 +2,211 @@
 
 # STATISTICAL ANALYSIS
 
-WILCOXON SIGNED-RANK TEST
-This script runs pairwise Wilcoxon signed-rank tests on the alpha-diversity features, separately for the treatment timepoints and the placebo timepoints. For each feature, it compares every possible pair of timepoints within the same group and saves the results to an Excel file. The test is nonparametric, so it is appropriate when the data may not be normally distributed.
-Pairing is done at the patient level using PatientID. For each timepoint comparison, the script takes the feature values from the two timepoints, merges them by PatientID, and only keeps patients who have data at both timepoints. This means each Wilcoxon test is performed on matched repeated measurements from the same individual, not on independent samples.
-Zero differences are handled with zero_method="wilcox", which removes pairs where the two values are identical before ranking the differences. If all paired values are identical for a feature/timepoint comparison, the test is skipped and marked as “Identical Values.” Ties are handled through the ranking step used in the signed-rank procedure, and the script also calculates a rank-biserial correlation effect size from the signed ranks to show the direction and magnitude of the change.
-The code currently uses alternative="two-sided", which tests for any difference between the two timepoints. If there is a pre-specified directional hypothesis, this can be changed to a one-sided test by using alternative="less" or alternative="greater" depending on the expected direction of change. The p-values are computed with method="exact", which is especially appropriate here because some comparisons involve very small paired sample sizes, such as n = 6 and n = 3. With such small numbers of pairs, the exact Wilcoxon distribution is preferred over the normal approximation.
-At the end, all treatment and placebo results are combined and written to wilcoxon_pairwise_less_at_tp1.xlsx, along with the Wilcoxon statistic, p-value, effect size, and sample-size information for each feature comparison.
+# Reproducibility Package for FMT Microbiome Statistical Analysis
 
-MANN-WHITNEY U TEST
-This script performs Mann–Whitney U tests to compare each numeric feature between two independent groups: Baseline and TD. It reads the data from Excel, filters the dataset to only those two timepoints, and then loops through all feature columns to test whether the distributions differ between the groups. The results are saved to an Excel file.
-Unlike the Wilcoxon signed-rank test, this test does not require paired measurements. The samples are treated as independent observations, so the values from Baseline are compared directly against the values from TD without matching by patient ID. This makes the test appropriate for between-group comparisons.
-The code uses alternative='two-sided', which tests for any difference between the two groups. If there is a pre-specified directional hypothesis, this can be changed to alternative='less' or alternative='greater' to run a one-sided test instead. For each feature, the script also calculates a rank-biserial correlation effect size, which summarizes the direction and magnitude of the difference.
-The sign of the rank-biserial correlation is used to label an enriched cohort. A positive value indicates enrichment in Baseline, a negative value indicates enrichment in TD, and a value of zero means there is no difference. The output file, mannwhitney_with_rankbiserial.xlsx, contains the Mann–Whitney U statistic, p-value, effect size, and enriched cohort for each feature.
+## Overview
 
-SYMPTOM ANALYSIS
-This script first calculates per-patient symptom changes over time. It reads the symptom data from Excel, keeps only the timepoints of interest, and converts the dataset from long format to wide format so that each patient has one row with repeated measurements across time. For each patient, it then computes the difference between Baseline and each later timepoint (End Part 1, End Part 2, and End Part 3) using the formula later timepoint minus Baseline. The output is a table of patient-level change scores for each symptom feature.
-After the per-patient differences are calculated, the script compares the Treated and Placebo groups using an independent two-sample t-test with unequal variance (Welch’s t-test). This test is run separately for each symptom and each follow-up timepoint. Because the two groups are independent and may have different variances, Welch’s t-test is more appropriate than the standard Student’s t-test.
-The code uses alternative="two-sided", so it tests for any difference between groups rather than assuming a specific direction. It also calculates Cohen’s d as an effect size to show the magnitude of the group difference, along with the absolute value of Cohen’s d for easier comparison across features. The final results are saved to Excel as independent_ttest_with_unequal_var.xlsx.
+This repository contains the code and processed test data required to reproduce the statistical analyses presented in the associated FMT microbiome study. The repository is organized to provide a transparent and reproducible workflow, allowing reviewers and researchers to execute the analyses using the provided test dataset.
+
+The analyses included in this repository consist of:
+
+* Pairwise Wilcoxon signed-rank tests for longitudinal alpha-diversity comparisons.
+* Mann–Whitney U tests for independent between-group comparisons.
+* Symptom change analysis using Welch's independent two-sample t-test.
+* Generation of the corresponding statistical output tables.
+
+---
+
+# Repository Structure
+
+```text
+reproducibility_package/
+│
+├── README.md
+├── environment.yml
+├── run_reproduce.sh
+├── data/
+│   └── test_dataset/
+├── code/
+├── expected_outputs/
+└── LICENSE
+```
+
+## Repository Contents
+
+### README.md
+
+This document describes the repository, explains each statistical analysis, and provides instructions for reproducing the results.
+
+### environment.yml
+
+Contains the software environment required to reproduce the analyses, including the Python version and all package dependencies. The environment can be recreated using Conda.
+
+### run_reproduce.sh
+
+A shell script that executes the complete statistical workflow in the appropriate order. Running this script reproduces all analyses using the supplied test dataset.
+
+### data/test_dataset/
+
+Contains a processed test dataset formatted identically to the study data. The dataset is intended solely for demonstrating the analysis workflow and reproducing the statistical pipeline.
+
+### code/
+
+Contains all analysis scripts used in the manuscript.
+
+### expected_outputs/
+
+Contains the expected output tables generated by the analysis pipeline. These files allow reviewers to verify that the reproduced results match the expected statistical outputs.
+
+### LICENSE
+
+Specifies the terms under which the repository and code may be used.
+
+---
+
+# Running the Analysis
+
+## 1. Clone the repository
+
+```bash
+git clone https://github.com/<username>/<repository>.git
+cd <repository>
+```
+
+## 2. Create the analysis environment
+
+```bash
+conda env create -f environment.yml
+conda activate <environment_name>
+```
+
+## 3. Execute the complete workflow
+
+```bash
+bash run_reproduce.sh
+```
+
+The script executes the statistical analyses sequentially and writes the output files to the appropriate output directory.
+
+---
+
+# Statistical Analyses
+
+## 1. Wilcoxon Signed-Rank Test
+
+This script performs pairwise Wilcoxon signed-rank tests on alpha-diversity features separately for the Treatment and Placebo groups.
+
+For each alpha-diversity feature, every possible pair of timepoints within the same treatment group is compared. Pairing is performed using **PatientID**, ensuring that only repeated measurements from the same participant are analyzed.
+
+For each timepoint comparison:
+
+* observations are matched by PatientID;
+* only patients with measurements at both timepoints are included;
+* identical paired observations are removed using `zero_method="wilcox"`;
+* comparisons with entirely identical paired values are reported as **Identical Values**.
+
+The script calculates:
+
+* Wilcoxon signed-rank statistic;
+* exact two-sided p-value (`method="exact"`);
+* rank-biserial correlation effect size;
+* paired sample size.
+
+Exact p-values are used because several comparisons contain very small paired sample sizes (for example, *n* = 3 or *n* = 6), where the exact Wilcoxon distribution is preferred over the normal approximation.
+
+The output is written to:
+
+`wilcoxon_pairwise_less_at_tp1.xlsx`
+
+---
+
+## 2. Mann–Whitney U Test
+
+This script compares each numeric feature between two independent groups (Baseline and TD).
+
+After reading the processed dataset, only the Baseline and TD observations are retained. Each feature is then tested independently using a two-sided Mann–Whitney U test.
+
+Because the observations are independent, no patient matching is performed.
+
+For every feature, the script reports:
+
+* Mann–Whitney U statistic;
+* exact p-value;
+* rank-biserial correlation effect size;
+* enriched cohort.
+
+The enriched cohort is determined from the sign of the rank-biserial correlation:
+
+* positive = Baseline enrichment;
+* negative = TD enrichment;
+* zero = no enrichment.
+
+Results are written to:
+
+`mannwhitney_with_rankbiserial.xlsx`
+
+---
+
+## 3. Symptom Analysis
+
+This script evaluates longitudinal symptom changes and compares treatment effects between study groups.
+
+The workflow consists of two stages.
+
+### Step 1: Calculate patient-level symptom changes
+
+The symptom dataset is read from Excel and filtered to the required study visits.
+
+The data are converted from long to wide format so that each patient has a single row containing repeated measurements across timepoints.
+
+For every symptom, change scores are calculated as:
+
+```
+Later Timepoint − Baseline
+```
+
+for:
+
+* End Part 1
+* End Part 2
+* End Part 3
+
+This produces patient-level change scores for each symptom.
+
+### Step 2: Compare Treatment and Placebo groups
+
+The change scores are compared between Treatment and Placebo groups using Welch's independent two-sample t-test.
+
+Welch's t-test is used because:
+
+* the two groups are independent;
+* equal variances are not assumed.
+
+The script reports:
+
+* t statistic;
+* two-sided p-value;
+* Cohen's *d* effect size;
+* absolute Cohen's *d*.
+
+Results are written to:
+
+`independent_ttest_with_unequal_var.xlsx`
+
+---
+
+# Expected Outputs
+
+Executing the complete workflow should generate the statistical output files contained in the `expected_outputs` directory. These outputs allow reviewers to verify that the analysis pipeline executes successfully and reproduces the expected statistical results.
+
+---
+
+# Software Requirements
+
+The analyses were developed using Python. All required software dependencies are listed in `environment.yml`.
+
+---
+
+# License
+
+This repository is distributed under the terms described in the accompanying `LICENSE` file.
