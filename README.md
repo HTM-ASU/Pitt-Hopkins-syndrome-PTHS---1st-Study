@@ -1,12 +1,14 @@
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+
 # Pitt-Hopkins-syndrome-PTHS---1st-Study
 
 # STATISTICAL ANALYSIS
 
-# Reproducibility Package for FMT Microbiome Statistical Analysis
+# Reproducibility Package for Microbiota Transplant Therapy (MTT) Microbiome Statistical Analysis
 
 ## Overview
 
-This repository contains the code and processed test data required to reproduce the statistical analyses presented in the associated FMT microbiome study. The repository is organized to provide a transparent and reproducible workflow, allowing reviewers and researchers to execute the analyses using the provided test dataset.
+This repository contains the code and processed test data required to reproduce the statistical analyses presented in the associated Microbiota Transplant Therapy (MTT) study. The repository is organized to provide a transparent and reproducible workflow, allowing reviewers and researchers to execute the analyses using the provided test dataset.
 
 The analyses included in this repository consist of:
 
@@ -209,4 +211,4 @@ The analyses were developed using Python. All required software dependencies are
 
 # License
 
-This repository is distributed under the terms described in the accompanying `LICENSE` file.
+This repository is licensed under the GNU General Public License v3.0 (GPL-3.0). See the `LICENSE` file for details.
