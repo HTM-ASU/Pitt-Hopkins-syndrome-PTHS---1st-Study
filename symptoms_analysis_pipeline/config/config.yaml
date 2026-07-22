@@ -1,0 +1,45 @@
+project_name: FLACC_DSR_Repro
+
+paths:
+  input_excel: data/raw/Final_merged_data_for_github_test_dataset.xlsx
+  input_sheet: Merged
+  processed_dir: output/tables
+  figures_dir: output/figures
+  logs_dir: output/logs
+
+files:
+  per_patient_differences: Per_patient_differences_FLACC_DSR.xlsx
+  ttest_results: T-test_results_FLACC_DSR_greater_in_treated.xlsx
+  figure_pdf: Symptoms_FLACC_DSR_Delta_p-values_04.06.2026_bold.pdf
+
+columns:
+  participant: Participant
+  group: Group
+  timepoint: Timepoint
+  scores:
+    - FLACC
+    - DSR Total Events
+    - GSRS AVG
+
+groups:
+  treated: GROUP A
+  control: GROUP B
+
+timepoints:
+  baseline: Baseline
+  end_part_1: End Part 1
+  end_part_2: End Part 2
+  end_part_3: End Part 3
+
+plot:
+  x_order:
+    - Baseline
+    - End Part 1
+    - End Part 2
+    - End Part 3
+  x_labels:
+    - Baseline
+    - EndPart 1
+    - EndPart 2
+    - EndPart 3
+  show_pvalue_only_for: End Part 1

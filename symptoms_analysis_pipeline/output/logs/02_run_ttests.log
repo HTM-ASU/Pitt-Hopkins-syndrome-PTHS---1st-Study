@@ -1,0 +1,13 @@
+Wrote: /Users/manishmuchapothula/Downloads/flacc_dsr_repro_complete 2/output/tables/T-test_results_FLACC_DSR_greater_in_treated.xlsx
+            feature   timepoint   p_value  ...  abs_cohens_d  n_treated  n_control
+0             FLACC  End Part 1  0.266184  ...      0.560112          3          3
+1  DSR Total Events  End Part 1  0.119661  ...      1.259029          3          3
+2          GSRS AVG  End Part 1  0.189726  ...      0.849791          3          3
+3             FLACC  End Part 2  0.500000  ...      0.000000          3          3
+4  DSR Total Events  End Part 2  0.500000  ...      0.000000          3          3
+5          GSRS AVG  End Part 2  0.476600  ...      0.052054          3          3
+6             FLACC  End Part 3  0.710042  ...      0.534522          3          3
+7  DSR Total Events  End Part 3  0.092983  ...      1.381790          3          3
+8          GSRS AVG  End Part 3  0.495700  ...      0.009419          3          3
+
+[9 rows x 8 columns]

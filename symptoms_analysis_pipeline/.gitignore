@@ -1,0 +1,6 @@
+output/*.log
+output/tables/*.xlsx
+output/figures/*.pdf
+__pycache__/
+*.pyc
+.DS_Store
